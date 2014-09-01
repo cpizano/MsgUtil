@@ -1,0 +1,16 @@
+{
+  "constant_mappings" : [
+    "WM_POWERBROADCAST": 536,
+    "PBT_APMPOWERSTATUSCHANGE": 10,
+    "PBT_APMSUSPEND": 4,
+    "PBT_APMRESUMEAUTOMATIC": 18,
+  ],
+
+  "power_status_change": [
+    "WM_POWERBROADCAST", "SEND", "PBT_APMPOWERSTATUSCHANGE", 0],
+  "power_suspend": [
+    "WM_POWERBROADCAST", "SEND", "PBT_APMSUSPEND", 0],
+  "power_resume": [
+    "WM_POWERBROADCAST", "SEND", "PBT_APMRESUMEAUTOMATIC", 0],
+
+};
