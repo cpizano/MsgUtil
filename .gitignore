@@ -1,5 +1,8 @@
 # VS2013 ignore list
 
+out/*
+plex_log.txt
+
 *.cdf
 *.cache
 *.obj
