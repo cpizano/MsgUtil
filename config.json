@@ -1,11 +1,11 @@
 {
-    "constant_mappings": [
-        { "WM_CLOSE": 10 },
-        { "WM_POWERBROADCAST": 536 },
-        { "PBT_APMPOWERSTATUSCHANGE": 10 },
-        { "PBT_APMSUSPEND": 4 },
-        { "PBT_APMRESUMEAUTOMATIC": 18 },
-    ],
+    "constant_mappings": {
+        "WM_CLOSE": 10,
+        "WM_POWERBROADCAST": 536,
+        "PBT_APMPOWERSTATUSCHANGE": 10,
+        "PBT_APMSUSPEND": 4 ,
+        "PBT_APMRESUMEAUTOMATIC": 18
+    },
 
     "messages":  [
         {

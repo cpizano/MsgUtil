@@ -45,23 +45,73 @@ enum Method {
 
 struct Message {
   Method method;
-  WPARAM wparam;
-  LPARAM lparam;
-  std::string info;
+  UINT message;
+  UINT wparam;
+  UINT lparam;
 };
 
 typedef std::unordered_map<std::string, long> Mappings;
+typedef std::unordered_map<std::string, Message> Messages;
 
 bool LoadMappings(plx::JsonValue& json, Mappings& mappings) {
-  auto cm = json["constant_mappings"];
-  if (cm.type != plx::JsonType::ARRAY)
+  const auto& cm = json["constant_mappings"];
+  if (cm.type() != plx::JsonType::OBJECT)
+    return false;
+  // expecting  <string> : number.
+  auto kv = cm.get_iterator();
+  while (kv.first != kv.second) {
+    const auto& key = kv.first->first;
+    const auto& val = kv.first->second;
+    if (val.type() != plx::JsonType::INT64)
+      return false;
+    mappings.insert(std::make_pair(key, plx::To<long>(val.get_int64())));
+    ++kv.first;
+  }
+  return true;
+}
+
+bool ResolveValue(plx::JsonValue& json_val, Mappings& mappings, UINT* value) {
+  if (json_val.type() == plx::JsonType::STRING) {
+    auto it = mappings.find(json_val.get_string());
+    if (it != mappings.end())
+      *value = plx::To<UINT>(it->second);
+  } else if (json_val.type() == plx::JsonType::INT64) {
+    *value = plx::To<UINT>(json_val.get_int64());
+  } else {
+    return false;
+  }
+  return true;
+}
+
+bool LoadMessages(plx::JsonValue& json, Messages& messages) {
+  Mappings mappings;
+  if (!LoadMappings(json, mappings))
     return false;
 
-  for (size_t ix = 0; ix != cm.size(); ++ix) {
-    auto entry = cm[ix];
-    if (entry.type != plx::JsonType::OBJECT)
+  auto& msg_array = json["messages"];
+  if (msg_array.type() != plx::JsonType::ARRAY)
+    return false;
+  
+  for (size_t ix = 0; ix != msg_array.size(); ++ix) {
+    auto& msg = msg_array[ix];
+    auto& name = msg["name"];
+    if (name.type() != plx::JsonType::STRING)
       return false;
-    // !!!! need to enumerate the keys.
+    auto& method = msg["method"];
+    if (name.type() != plx::JsonType::STRING)
+      return false;
+    
+    Message m;
+    m.method =  method.get_string() == "SEND" ?
+        sent_message : posted_message;
+    if (!ResolveValue(msg["message"], mappings, &m.message))
+      return false;
+    if (!ResolveValue(msg["wparam"], mappings, &m.wparam))
+      return false;
+    if (!ResolveValue(msg["lparam"], mappings, &m.lparam))
+      return false;
+
+    messages[name.get_string()] = m;
   }
   return true;
 }
@@ -69,10 +119,8 @@ bool LoadMappings(plx::JsonValue& json, Mappings& mappings) {
 int wmain(int argc, wchar_t* argv[]) {
   auto config = ReadConfig(OpenConfigFile());
 
-  Mappings mappings;
-  std::vector<Message> messages;
-
-  if (!LoadMappings(config, mappings))
+  Messages messages;
+  if (!LoadMessages(config, messages))
     return 1;
 
   return 0;
