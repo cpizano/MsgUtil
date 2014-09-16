@@ -1,16 +1,41 @@
 {
-  "constant_mappings" : [
-    "WM_POWERBROADCAST": 536,
-    "PBT_APMPOWERSTATUSCHANGE": 10,
-    "PBT_APMSUSPEND": 4,
-    "PBT_APMRESUMEAUTOMATIC": 18,
-  ],
+    "constant_mappings": [
+        { "WM_CLOSE": 10 },
+        { "WM_POWERBROADCAST": 536 },
+        { "PBT_APMPOWERSTATUSCHANGE": 10 },
+        { "PBT_APMSUSPEND": 4 },
+        { "PBT_APMRESUMEAUTOMATIC": 18 },
+    ],
 
-  "power_status_change": [
-    "WM_POWERBROADCAST", "SEND", "PBT_APMPOWERSTATUSCHANGE", 0],
-  "power_suspend": [
-    "WM_POWERBROADCAST", "SEND", "PBT_APMSUSPEND", 0],
-  "power_resume": [
-    "WM_POWERBROADCAST", "SEND", "PBT_APMRESUMEAUTOMATIC", 0],
+    "messages":  [
+        {
+            "name" : "power_status_change",
+            "method": "SEND",
+            "message": "WM_POWERBROADCAST",
+            "wparam": "PBT_APMPOWERSTATUSCHANGE",
+            "lparam": 0
+        },
+        {
+            "name" : "power_suspend",
+            "method": "SEND",
+            "message": "WM_POWERBROADCAST",
+            "wparam": "PBT_APMSUSPEND",
+            "lparam": 0
+        },
+        {
+            "name" : "power_resume",
+            "method": "SEND",
+            "message": "WM_POWERBROADCAST",
+            "wparam": "PBT_APMRESUMEAUTOMATIC",
+            "lparam": 0
+        },
+        {
+            "name" :  "close",
+            "method": "SEND",
+            "message": "WM_CLOSE",
+            "wparam": 0,
+            "lparam": 0
+        }
+    ]
 
 };

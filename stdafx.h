@@ -20,9 +20,11 @@
 #include <map>
 #include <algorithm>
 #include <utility>
+#include <limits>
 #include <type_traits>
 #include <string>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 
@@ -145,7 +147,7 @@ public:
 
   size_t starts_with(const ItRange<It>& o) const {
     if (o.size() > size())
-      return false;
+      return 0;
     return (memcmp(s_, o.s_, o.size()) == 0) ? o.size() : 0;
   }
 
@@ -196,6 +198,18 @@ public:
     e_ = s_ + sz;
   }
 
+  ItRange<const uint8_t*> const_bytes() const {
+    auto s = reinterpret_cast<const uint8_t*>(s_);
+    auto e = reinterpret_cast<const uint8_t*>(e_);
+    return ItRange<const uint8_t*>(s, e);
+  }
+
+   ItRange<uint8_t*> bytes() const {
+    auto s = reinterpret_cast<uint8_t*>(s_);
+    auto e = reinterpret_cast<uint8_t*>(e_);
+    return ItRange<uint8_t*>(s, e);
+  }
+
 };
 
 template <typename U, size_t count>
@@ -207,6 +221,17 @@ template <typename U, size_t count>
 ItRange<U*> RangeFromArray(U (&str)[count]) {
   return ItRange<U*>(str, str + count);
 }
+
+template <typename U>
+ItRange<U*> RangeUntilValue(U* start, U value) {
+  auto stop = start;
+  while (*stop != value) {
+    ++stop;
+  }
+  return ItRange<U*>(start, stop);
+}
+
+
 
 ItRange<uint8_t*> RangeFromBytes(void* start, size_t count) ;
 
@@ -565,13 +590,13 @@ public:
     return (handle_ != INVALID_HANDLE_VALUE);
   }
 
-  size_t size_in_bytes() const {
+  long long size_in_bytes() const {
     LARGE_INTEGER li = {0};
     ::GetFileSizeEx(handle_, &li);
     return li.QuadPart;
   }
 
-  size_t read(plx::Range<char>& mem, unsigned int from) {
+  size_t read(plx::Range<uint8_t>& mem, unsigned int from) {
     OVERLAPPED ov = {0};
     ov.Offset = from;
     DWORD read = 0;
@@ -581,15 +606,11 @@ public:
     return read;
   }
 
-  size_t write(const plx::Range<const char>& mem, int from = -1) {
+  size_t write(const plx::Range<const uint8_t>& mem, int from = -1) {
     return write(mem.start(), mem.size(), from);
   }
 
-  size_t write(const plx::Range<char>& mem, int from = -1) {
-    return write(mem.start(), mem.size(), from);
-  }
-
-  size_t write(const char* buf, size_t len, int from) {
+  size_t write(const uint8_t* buf, size_t len, int from) {
     OVERLAPPED ov = {0};
     ov.Offset = from;
     DWORD written = 0;
@@ -849,6 +870,56 @@ class JsonValue {
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// plx::OverflowKind
+//
+enum class OverflowKind {
+  None,
+  Positive,
+  Negative,
+};
+
+
+///////////////////////////////////////////////////////////////////////////////
+// plx::OverflowException (thrown by some numeric converters)
+// kind_ : Type of overflow, positive or negative.
+//
+class OverflowException : public plx::Exception {
+  plx::OverflowKind kind_;
+
+public:
+  OverflowException(int line, plx::OverflowKind kind)
+      : Exception(line, "Overflow"), kind_(kind) {
+    PostCtor();
+  }
+  plx::OverflowKind kind() const { return kind_; }
+};
+
+
+///////////////////////////////////////////////////////////////////////////////
+// plx::NextInt  integer promotion.
+
+short NextInt(char value) ;
+
+int NextInt(short value) ;
+
+long long NextInt(int value) ;
+
+long long NextInt(long value) ;
+
+long long NextInt(long long value) ;
+
+short NextInt(unsigned char value) ;
+
+int NextInt(unsigned short value) ;
+
+long long NextInt(unsigned int value) ;
+
+long long NextInt(unsigned long value) ;
+
+long long NextInt(unsigned long long value) ;
+
+
+///////////////////////////////////////////////////////////////////////////////
 // plx::CodecException (thrown by some decoders)
 // bytes_ : The 16 bytes or less that caused the issue.
 //
@@ -901,4 +972,77 @@ plx::JsonValue ParseJsonValue(plx::Range<const char>& range);
 
 plx::JsonValue ParseJsonValue(plx::Range<const char>& range) ;
 
+
+///////////////////////////////////////////////////////////////////////////////
+// plx::To  (integer to integer type safe cast)
+//
+
+template <bool src_signed, bool tgt_signed>
+struct ToCastHelper;
+
+template <>
+struct ToCastHelper<false, false> {
+  template <typename Tgt, typename Src>
+  static inline Tgt cast(Src value) {
+    if (sizeof(Tgt) >= sizeof(Src)) {
+      return static_cast<Tgt>(value);
+    } else {
+      if (value > std::numeric_limits<Tgt>::max())
+        throw plx::OverflowException(__LINE__, OverflowKind::Positive);
+      if (value < std::numeric_limits<Tgt>::min())
+        throw plx::OverflowException(__LINE__, OverflowKind::Negative);
+      return static_cast<Tgt>(value);
+    }
+  }
+};
+
+template <>
+struct ToCastHelper<true, true> {
+  template <typename Tgt, typename Src>
+  static inline Tgt cast(Src value) {
+    if (sizeof(Tgt) >= sizeof(Src)) {
+      return static_cast<Tgt>(value);
+    } else {
+      if (value > std::numeric_limits<Tgt>::max())
+        throw plx::OverflowException(__LINE__, OverflowKind::Positive);
+      if (value < std::numeric_limits<Tgt>::min())
+        throw plx::OverflowException(__LINE__, OverflowKind::Negative);
+      return static_cast<Tgt>(value);
+    }
+  }
+};
+
+template <>
+struct ToCastHelper<false, true> {
+  template <typename Tgt, typename Src>
+  static inline Tgt cast(Src value) {
+    if (plx::NextInt(value) > std::numeric_limits<Tgt>::max())
+      throw plx::OverflowException(__LINE__, OverflowKind::Positive);
+    if (plx::NextInt(value) < std::numeric_limits<Tgt>::min())
+      throw plx::OverflowException(__LINE__, OverflowKind::Negative);
+    return static_cast<Tgt>(value);
+  }
+};
+
+template <>
+struct ToCastHelper<true, false> {
+  template <typename Tgt, typename Src>
+  static inline Tgt cast(Src value) {
+    if (value < Src(0))
+      throw plx::OverflowException(__LINE__, OverflowKind::Negative);
+    if (unsigned(value) > std::numeric_limits<Tgt>::max())
+      throw plx::OverflowException(__LINE__, OverflowKind::Positive);
+    return static_cast<Tgt>(value);
+  }
+};
+
+template <typename Tgt, typename Src>
+typename std::enable_if<
+    std::numeric_limits<Tgt>::is_integer &&
+    std::numeric_limits<Src>::is_integer,
+    Tgt>::type
+To(const Src & value) {
+  return ToCastHelper<std::numeric_limits<Src>::is_signed,
+                      std::numeric_limits<Tgt>::is_signed>::cast<Tgt>(value);
+}
 }
