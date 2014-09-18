@@ -1,0 +1,58 @@
+{
+    "constant_mappings": {
+        "WM_CLOSE": 16,
+        "WM_KEYDOWN": 256,
+        "WM_KEYUP": 257,
+        "WM_POWERBROADCAST": 536,
+        "PBT_APMPOWERSTATUSCHANGE": 10,
+        "PBT_APMSUSPEND": 4 ,
+        "PBT_APMRESUMEAUTOMATIC": 18
+    },
+
+    "messages":  [
+        {
+            "name" : "power_status_change",
+            "method": "SEND",
+            "message": "WM_POWERBROADCAST",
+            "wparam": "PBT_APMPOWERSTATUSCHANGE",
+            "lparam": 0
+        },
+        {
+            "name" : "power_suspend",
+            "method": "SEND",
+            "message": "WM_POWERBROADCAST",
+            "wparam": "PBT_APMSUSPEND",
+            "lparam": 0
+        },
+        {
+            "name" : "power_resume",
+            "method": "SEND",
+            "message": "WM_POWERBROADCAST",
+            "wparam": "PBT_APMRESUMEAUTOMATIC",
+            "lparam": 0
+        },
+        {
+            "name": "close",
+            "method": "SEND",
+            "message": "WM_CLOSE",
+            "wparam": 0,
+            "lparam": 0
+        },
+        {
+            "name" :  "keydown_a",
+            "method": "POST",
+            "message": "WM_KEYDOWN",
+            "wparam": 65,
+            "lparam": 1
+        },
+        {
+            "name" :  "keyup_a",
+            "method": "POST",
+            "message": "WM_KEYUP",
+            "wparam": 65,
+            "lparam": 3221225473
+        }
+ 
+    ]
+
+};
