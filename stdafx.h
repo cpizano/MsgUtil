@@ -256,6 +256,13 @@ std::unique_ptr<U[]> HeapRange(ItRange<U*>&r) {
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// plx::Range  (alias for ItRange<T*>)
+//
+template <typename T>
+using Range = plx::ItRange<T*>;
+
+
+///////////////////////////////////////////////////////////////////////////////
 // plx::IOException
 // error_code_ : The win32 error code of the last operation.
 // name_ : The file or pipe in question.
@@ -387,6 +394,13 @@ public:
 plx::FilePath GetExePath() ;
 
 
+///////////////////////////////////////////////////////////////////////////////
+// plx::Hash_FNV1a_64  (nice hash function for strings used by c++ std)
+// for short inputs is about 100 times faster than SHA1 and about 20 times
+// faster for long inputs.
+uint64_t Hash_FNV1a_64(const plx::Range<const uint8_t>& r) ;
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // HexASCII (converts a byte into a two-char readable representation.
@@ -398,10 +412,7 @@ char* HexASCII(uint8_t byte, char* out) ;
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// plx::Range  (alias for ItRange<T*>)
-//
-template <typename T>
-using Range = plx::ItRange<T*>;
+std::string HexASCIIStr(const plx::Range<const uint8_t>& r, char separator) ;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -623,7 +634,25 @@ public:
 
 
 ///////////////////////////////////////////////////////////////////////////////
-std::string HexASCIIStr(const plx::Range<const uint8_t>& r, char separator) ;
+// plx::CodecException (thrown by some decoders)
+// bytes_ : The 16 bytes or less that caused the issue.
+//
+class CodecException : public plx::Exception {
+  uint8_t bytes_[16];
+  size_t count_;
+
+public:
+  CodecException(int line, const plx::Range<const unsigned char>* br)
+      : Exception(line, "Codec exception"), count_(0) {
+    if (br)
+      count_ = br->CopyToArray(bytes_);
+    PostCtor();
+  }
+
+  std::string bytes() const {
+    return plx::HexASCIIStr(plx::Range<const uint8_t>(bytes_, count_), ',');
+  }
+};
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -938,34 +967,6 @@ long long NextInt(unsigned long long value) ;
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// plx::CodecException (thrown by some decoders)
-// bytes_ : The 16 bytes or less that caused the issue.
-//
-class CodecException : public plx::Exception {
-  uint8_t bytes_[16];
-  size_t count_;
-
-public:
-  CodecException(int line, const plx::Range<const unsigned char>* br)
-      : Exception(line, "Codec exception"), count_(0) {
-    if (br)
-      count_ = br->CopyToArray(bytes_);
-    PostCtor();
-  }
-
-  std::string bytes() const {
-    return plx::HexASCIIStr(plx::Range<const uint8_t>(bytes_, count_), ',');
-  }
-};
-
-
-///////////////////////////////////////////////////////////////////////////////
-// plx::DecodeString (decodes a json-style encoded string)
-//
-std::string DecodeString(plx::Range<const char>& range) ;
-
-
-///////////////////////////////////////////////////////////////////////////////
 // SkipWhitespace (advances a range as long isspace() is false.
 //
 template <typename T>
@@ -981,6 +982,110 @@ SkipWhitespace(const plx::Range<T>& r) {
   }
   return wr;
 }
+
+
+///////////////////////////////////////////////////////////////////////////////
+// plx::CmdLine (handles command line arguments)
+//
+
+class CmdLine {
+
+  struct KeyHash {
+    size_t operator()(const plx::Range<const wchar_t>& r) const {
+      return plx::Hash_FNV1a_64(r.const_bytes());
+    }
+  };
+
+  struct KeyEqual {
+    bool operator()(const plx::Range<const wchar_t>& lhs, const plx::Range<const wchar_t>& rhs) const {
+      return lhs.equals(rhs);
+    }
+  };
+
+  std::unordered_map<plx::Range<const wchar_t>, plx::Range<const wchar_t>, KeyHash, KeyEqual> opts_;
+  std::vector<plx::Range<const wchar_t>> extra_;
+  plx::Range<const wchar_t> program_;
+
+public:
+  CmdLine(int argc, wchar_t* argv[]) {
+    if (!argc)
+      return;
+
+    int start;
+    auto arg0 = plx::RangeUntilValue<wchar_t>(argv[0], 0);
+    if (is_program(arg0)) {
+      program_ = arg0;
+      start = 1;
+    } else {
+      start = 0;
+    }
+
+    for (int ix = start; ix != argc; ++ix) {
+      auto c_arg = plx::RangeUntilValue<wchar_t>(argv[ix], 0);
+      if (IsOption(c_arg)) {
+        c_arg.advance(2);
+        opts_.insert(NameValue(c_arg));
+      } else {
+        extra_.push_back(c_arg);
+      }
+    }
+  }
+
+  template <size_t count>
+  const bool has_switch(const wchar_t (&str)[count],
+                        plx::Range<const wchar_t>* value = nullptr) const {
+
+    return has_switch(plx::RangeFromLitStr<const wchar_t, count>(str), value);
+  }
+
+  const bool has_switch(const plx::Range<const wchar_t>& name,
+                        plx::Range<const wchar_t>* value = nullptr) const {
+    auto pos = opts_.find(name);
+    bool found = pos != end(opts_);
+    if (value && found) {
+      *value = pos->second;
+      return true;
+    }
+    return found;
+  }
+
+  size_t extra_count() const {
+    return extra_.size();
+  }
+
+  plx::Range<const wchar_t> extra(size_t index) const {
+    if (index >= extra_.size())
+      return plx::Range<wchar_t>();
+    return extra_[index];
+  }
+
+private:
+  bool IsOption(const plx::Range<wchar_t>& r) {
+    if (r.size() < 3)
+      return false;
+    return ((r[0] == '-') && (r[1] == '-') && (r[2] != '-') && (r[2] != '='));
+  }
+
+  bool is_program(const plx::Range<wchar_t>& r) const {
+    // $$$ todo.
+    return false;
+  }
+
+  std::pair<plx::Range<wchar_t>, plx::Range<wchar_t>> NameValue(plx::Range<wchar_t>& r) {
+    size_t pos = 0;
+    if (r.contains(L'=', &pos) && pos < (r.size() - 1))
+      return std::make_pair(
+          plx::Range<wchar_t>(r.start(), r.start() + pos),
+          plx::Range<wchar_t>(r.start() + pos + 1, r.end()));
+    return std::make_pair(r, plx::Range<wchar_t>());
+  }
+};
+
+
+///////////////////////////////////////////////////////////////////////////////
+// plx::DecodeString (decodes a json-style encoded string)
+//
+std::string DecodeString(plx::Range<const char>& range) ;
 
 
 ///////////////////////////////////////////////////////////////////////////////

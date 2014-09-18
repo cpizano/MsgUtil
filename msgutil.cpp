@@ -123,5 +123,56 @@ int wmain(int argc, wchar_t* argv[]) {
   if (!LoadMessages(config, messages))
     return 1;
 
+  plx::CmdLine cmd_line(argc, argv);
+
+  if (cmd_line.has_switch(L"help")) {
+    wprintf(L"msgutil <target window> <message> ...<message>\n");
+    wprintf(L"see config.json for message names\n");
+    return 0;
+  }
+
+  if (cmd_line.extra_count() < 3) {
+    wprintf(L"huh? try --help\n");
+    return 1;
+  }
+
+  HWND window = HWND(wcstol(cmd_line.extra(1).start(), nullptr, 0));
+  if (!window) {
+    wprintf(L"window value can't be parsed\n");
+    return 3;
+  }
+
+  if (!::IsWindow(window)) {
+    wprintf(L"%p seems not to be a live window\n", window);
+    return 4;
+  }
+
+  DWORD pid;
+  DWORD tid = ::GetWindowThreadProcessId(window, &pid);
+  if (!tid) {
+    wprintf(L"strange, can't retrieve process info about %p\n", window);
+  }
+
+  for (size_t ix = 2; ix != cmd_line.extra_count(); ++ix) {
+
+    auto it = messages.find(plx::StringFromRange(cmd_line.extra(ix)));
+    if (it == messages.end()) {
+      wprintf(L"message not found. see config.json\n");
+      return 2;
+    }
+    const Message& msg = it->second;
+
+    if (msg.method == posted_message) {
+      wprintf(L"posting 0x0%x (0x0%x) to pid.tid = %d.%d\n",
+          msg.message, msg.wparam, pid, tid);
+      BOOL r = ::PostMessageW(window, msg.message, msg.wparam, msg.lparam);
+    } else if (msg.method == sent_message) {
+      wprintf(L"sending 0x0%x (0x0%x) to pid.tid = %d.%d\n",
+          msg.message, msg.wparam, pid, tid);
+      LRESULT r = ::SendMessageW(window, msg.message, msg.wparam, msg.lparam);
+    }
+    ::Sleep(10);
+  }
+
   return 0;
 }
